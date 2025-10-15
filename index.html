@@ -19,11 +19,15 @@
     .row{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center}
     .btn{padding:.6rem 1rem;border-radius:12px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;cursor:pointer}
     .btn:active{transform:translateY(1px)}
+
     .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:1rem}
     .modal.show{display:flex}
     .card{background:#0b0d12;border:1px solid #1f2937;border-radius:18px;max-width:560px;width:100%;padding:1.25rem}
-    .closed{position:fixed;inset:0;display:grid;place-items:center;background:#0a0c10}
+
+    .closed{position:fixed;inset:0;display:none;place-items:center;background:#0a0c10}
+    .closed.show{display:grid}
     .closed .box{border:1px dashed #374151;border-radius:18px;padding:2rem;max-width:560px;text-align:center}
+
     .flagwrap{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.72)}
     .flagwrap.show{display:flex}
     .flagcard{background:#001b1b;border:1px solid #0e7490;border-radius:20px;padding:1.5rem;max-width:680px;width:100%}
@@ -32,7 +36,9 @@
 </head>
 <body>
   <div class="wrap" id="app">
+    <!-- 只對這個「整頁大按鈕」計次 -->
     <button class="bigbtn" id="bigbtn" aria-label="等待即可獲得旗幟"></button>
+
     <div class="panel">
       <div class="title">等待一小時，伺服器驗證 🏳️</div>
       <div class="kpis">
@@ -50,6 +56,7 @@
     </div>
   </div>
 
+  <!-- 特殊頁面（線索） -->
   <div class="modal" id="modal">
     <div class="card">
       <h3>特殊頁面（線索）</h3>
@@ -60,7 +67,8 @@
     </div>
   </div>
 
-  <div class="closed" id="closed" style="display:none">
+  <!-- 關閉畫面 -->
+  <div class="closed" id="closed">
     <div class="box">
       <h2>Web 已自動關閉</h2>
       <p class="sub">原因：超過 30 分鐘或點擊超過 3 次（以伺服器端為準）。</p>
@@ -70,6 +78,7 @@
     </div>
   </div>
 
+  <!-- 旗幟畫面 -->
   <div class="flagwrap" id="flagwrap">
     <div class="flagcard">
       <h2>恭喜你，耐心通關！</h2>
@@ -95,37 +104,52 @@
     }
 
     async function boot(){
-      // 初始化（伺服器回傳開始時間/規則）
+      // 初始化（伺服器會回開始時間與規則）
       const info = await api('/api/start', { method:'POST' });
       startAt = info.startAt;
       clicks  = info.clicks;
       FLAG_READY_SECS = info.FLAG_READY_SECS;
       AUTO_CLOSE_SECS = info.AUTO_CLOSE_SECS;
       MAX_CLICKS      = info.MAX_CLICKS;
-      tick();
 
-      // 點擊：伺服器端累加，回傳最新 clicks
-      document.addEventListener('click', async () => {
+      // 只對整頁「大按鈕」計次；模態開啟時不計
+      const modal = $('#modal');
+      $('#bigbtn').addEventListener('click', async (e)=>{
         if (closed) return;
+        if (modal.classList.contains('show')) return; // 有模態就不計
         try{
           const r = await api('/api/click', { method:'POST' });
           clicks = r.clicks;
           $('#clicks').textContent = clicks;
-          $('#modal').classList.add('show');
+          modal.classList.add('show');
           if (clicks > MAX_CLICKS) {
-            closed = true; $('#closed').style.display='grid';
+            closed = true; $('#closed').classList.add('show');
           }
-        }catch(e){ console.warn(e.message); }
+        }catch(err){ console.warn(err.message); }
       });
 
-      $('#closeModal').onclick = ()=> $('#modal').classList.remove('show');
-      $('#resetBtn').onclick = $('#resetBtn2').onclick = async ()=>{
-        await api('/api/start', { method:'POST' }); // 重置 cookie
+      // 模態內按鈕阻止冒泡，避免被誤算為一次「頁面點擊」
+      $('#closeModal').addEventListener('click', (e)=>{
+        e.stopPropagation();
+        modal.classList.remove('show');
+      });
+
+      // 點遮罩背景可關閉模態（不計次）
+      modal.addEventListener('click', (e)=>{
+        if (e.target === modal) modal.classList.remove('show');
+      });
+
+      // 重置（兩個地方的按鈕都能用）
+      const doReset = async ()=>{
+        await api('/api/start', { method:'POST' }); // 重發新 cookie
         location.reload();
       };
+      $('#resetBtn').onclick  = doReset;
+      $('#resetBtn2').onclick = doReset;
 
-      // 每秒更新 UI；時間到呼叫 /api/flag 由伺服器判定
+      // 每秒更新 UI；時間到請伺服器核發旗
       setInterval(tick, 1000);
+      tick();
     }
 
     async function tick(){
@@ -137,7 +161,7 @@
       $('#clicks').textContent  = clicks;
 
       if (el >= AUTO_CLOSE_SECS || clicks > MAX_CLICKS) {
-        closed = true; $('#closed').style.display='grid'; return;
+        closed = true; $('#closed').classList.add('show'); return;
       }
       if (el >= FLAG_READY_SECS) {
         try{
@@ -145,7 +169,7 @@
           $('#flagText').textContent = r.flag || '(flag 失敗)';
           $('#flagwrap').classList.add('show');
         }catch(e){
-          // 還不給（伺服器會回錯誤訊息），忽略
+          // 未達條件時會回 4xx，忽略即可
         }
       }
     }
