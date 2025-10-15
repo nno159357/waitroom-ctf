@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>WaitRoom – 停留一小時拿旗</title>
+  <title>WaitRoom – 伺服器驗證版</title>
   <style>
     :root{--bg:#0f1115;--fg:#e5e7eb;--muted:#9ca3af}
     *{box-sizing:border-box}
@@ -19,26 +19,14 @@
     .row{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center}
     .btn{padding:.6rem 1rem;border-radius:12px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;cursor:pointer}
     .btn:active{transform:translateY(1px)}
-    .hint{font-size:.95rem;color:#a7f3d0}
-    .pill{display:inline-block;padding:.15rem .5rem;border-radius:999px;border:1px dashed #334155;color:#94a3b8}
-
-    /* 特殊頁面（模態） */
     .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:1rem}
     .modal.show{display:flex}
     .card{background:#0b0d12;border:1px solid #1f2937;border-radius:18px;max-width:560px;width:100%;padding:1.25rem}
-    .card h3{margin:.25rem 0 .5rem 0;font-size:1.15rem}
-    .card p{color:#d1d5db;line-height:1.6}
-
-    /* 關閉畫面 */
     .closed{position:fixed;inset:0;display:grid;place-items:center;background:#0a0c10}
     .closed .box{border:1px dashed #374151;border-radius:18px;padding:2rem;max-width:560px;text-align:center}
-    .closed h2{margin:0 0 .5rem 0}
-
-    /* flag 畫面 */
     .flagwrap{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.72)}
     .flagwrap.show{display:flex}
     .flagcard{background:#001b1b;border:1px solid #0e7490;border-radius:20px;padding:1.5rem;max-width:680px;width:100%}
-    .flagcard h2{margin:0 0 .5rem 0}
     code{background:#111827;border:1px solid #1f2937;padding:.25rem .4rem;border-radius:6px}
   </style>
 </head>
@@ -46,180 +34,123 @@
   <div class="wrap" id="app">
     <button class="bigbtn" id="bigbtn" aria-label="等待即可獲得旗幟"></button>
     <div class="panel">
-      <div class="title">等待一小時，獲得旗幟 🏳️</div>
+      <div class="title">等待一小時，伺服器驗證 🏳️</div>
       <div class="kpis">
-        <div class="kpi"><div class="sub">已等待</div><div class="v" id="elapsed">00:00:00</div></div>
-        <div class="kpi"><div class="sub">距離自動關閉（30 分）</div><div class="v" id="toClose">30:00</div></div>
-        <div class="kpi"><div class="sub">距離可領旗（60 分）</div><div class="v" id="toFlag">60:00</div></div>
+        <div class="kpi"><div class="sub">已等待</div><div class="v" id="elapsed">--:--:--</div></div>
+        <div class="kpi"><div class="sub">距離自動關閉</div><div class="v" id="toClose">--:--</div></div>
+        <div class="kpi"><div class="sub">距離可領旗</div><div class="v" id="toFlag">--:--</div></div>
         <div class="kpi"><div class="sub">點擊次數（≤3）</div><div class="v" id="clicks">0</div></div>
       </div>
 
       <div class="row">
-        <!-- 一鍵重置（一般畫面也能按） -->
-        <button class="btn" id="resetBtn" title="清除 wr_start_at / wr_clicks / wr_closed 並重整">重置挑戰</button>
+        <button class="btn" id="resetBtn">重置挑戰（清 Cookie）</button>
       </div>
 
-      <div class="hint">提示：任意點擊都會跳出「特殊頁面」。但點太多會關門喔。</div>
-      <div class="sub">你可以從 <span class="pill">開發人員工具</span> 觀察等待邏輯；或直接找 <code>/flag.txt</code>。</div>
+      <div class="sub">伺服器端會驗證時間與點擊次數；直接改 localStorage 沒用。</div>
     </div>
   </div>
 
-  <!-- 特殊頁面（線索） -->
   <div class="modal" id="modal">
     <div class="card">
       <h3>特殊頁面（線索）</h3>
-      <p id="clueText">……</p>
+      <p id="clueText">觀察網路請求：/api/start、/api/click、/api/flag</p>
       <div class="row">
         <button class="btn" id="closeModal">知道了</button>
-        <button class="btn" id="openDevtools">怎麼找邏輯？</button>
       </div>
     </div>
   </div>
 
-  <!-- flag 畫面 -->
+  <div class="closed" id="closed" style="display:none">
+    <div class="box">
+      <h2>Web 已自動關閉</h2>
+      <p class="sub">原因：超過 30 分鐘或點擊超過 3 次（以伺服器端為準）。</p>
+      <div style="margin-top:1rem;">
+        <button class="btn" id="resetBtn2">重置挑戰</button>
+      </div>
+    </div>
+  </div>
+
   <div class="flagwrap" id="flagwrap">
     <div class="flagcard">
       <h2>恭喜你，耐心通關！</h2>
-      <p>以下為你的旗幟：</p>
+      <p>以下為伺服器核發的旗幟：</p>
       <p><code id="flagText">loading…</code></p>
-      <p class="sub">（同時也可於 <code>/flag.txt</code> 直接取得。）</p>
       <div class="row"><button class="btn" onclick="location.reload()">重新開始</button></div>
     </div>
   </div>
 
   <script>
-    // === 等待控制（公開在全域，供 DevTools 查看） ===
-    window.__waitControls = {
-      START_KEY: 'wr_start_at',
-      CLICK_KEY: 'wr_clicks',
-      CLOSED_KEY: 'wr_closed',
-      FLAG_READY_SECS: 60 * 60,   // 1 小時
-      AUTO_CLOSE_SECS: 30 * 60,   // 30 分鐘
-      MAX_CLICKS: 3
-    };
-    const S = window.__waitControls;
-
-    // 小工具
     const $ = s => document.querySelector(s);
     const now = () => Math.floor(Date.now()/1000);
-    const fmtHMS = s => {
-      s = Math.max(0, Math.floor(s));
-      const h=String(Math.floor(s/3600)).padStart(2,'0');
-      const m=String(Math.floor((s%3600)/60)).padStart(2,'0');
-      const sec=String(s%60).padStart(2,'0');
-      return `${h}:${m}:${sec}`;
-    };
-    const fmtMS = s => {
-      s = Math.max(0, Math.floor(s));
-      return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
-    };
+    const pad = n => String(n).padStart(2,'0');
+    const fmtHMS = s => { s=Math.max(0,Math.floor(s)); return `${pad(s/3600|0)}:${pad((s%3600)/60|0)}:${pad(s%60)}`; }
+    const fmtMS  = s => { s=Math.max(0,Math.floor(s)); return `${pad(s/60|0)}:${pad(s%60)}`; }
 
-    // 初始化 LocalStorage
-    if(!localStorage.getItem(S.START_KEY)) localStorage.setItem(S.START_KEY, String(now()));
-    if(!localStorage.getItem(S.CLICK_KEY)) localStorage.setItem(S.CLICK_KEY, '0');
+    let startAt = null, clicks = 0, FLAG_READY_SECS=3600, AUTO_CLOSE_SECS=1800, MAX_CLICKS=3, closed=false;
 
-    // 一鍵重置（一般畫面）
-    $('#resetBtn').addEventListener('click', () => {
-      localStorage.removeItem(S.START_KEY);
-      localStorage.removeItem(S.CLICK_KEY);
-      localStorage.removeItem(S.CLOSED_KEY);
-      location.reload();
-    });
-
-    // 關閉畫面
-    const isClosed = () => localStorage.getItem(S.CLOSED_KEY)==='1';
-    const setClosed = () => { localStorage.setItem(S.CLOSED_KEY,'1'); renderClosed(); };
-
-    function renderClosed(){
-      document.body.innerHTML = `
-        <div class="closed">
-          <div class="box">
-            <h2>Web 已自動關閉</h2>
-            <p class="sub">原因：超過 30 分鐘或點擊超過 3 次。</p>
-            <p class="sub">可按下方按鈕清空 LocalStorage 後重試。</p>
-            <div style="margin-top:1rem;">
-              <button class="btn" onclick="
-                localStorage.removeItem('wr_start_at');
-                localStorage.removeItem('wr_clicks');
-                localStorage.removeItem('wr_closed');
-                location.reload();
-              ">重置挑戰</button>
-            </div>
-          </div>
-        </div>`;
+    async function api(path, init) {
+      const res = await fetch(path, { ...init, credentials: 'include', cache:'no-store' });
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
     }
 
-    if(isClosed()){ renderClosed(); }
-    else { boot(); }
+    async function boot(){
+      // 初始化（伺服器回傳開始時間/規則）
+      const info = await api('/api/start', { method:'POST' });
+      startAt = info.startAt;
+      clicks  = info.clicks;
+      FLAG_READY_SECS = info.FLAG_READY_SECS;
+      AUTO_CLOSE_SECS = info.AUTO_CLOSE_SECS;
+      MAX_CLICKS      = info.MAX_CLICKS;
+      tick();
 
-    function boot(){
-      const startAt = Number(localStorage.getItem(S.START_KEY) || now());
-      const modal = $('#modal');
-      const closeModal = $('#closeModal');
-      const openDevtools = $('#openDevtools');
-
-      let clicks = Number(localStorage.getItem(S.CLICK_KEY) || 0);
-      let closed = false;
-
-      const clues = [
-        '提示 1：控制常數公開在 window.__waitControls。',
-        '提示 2：LocalStorage 的 wr_start_at / wr_clicks / wr_closed。',
-        '提示 3：/flag.txt 可能是你想找的檔案。',
-        '提示 4：超過 30 分鐘或點滿 3 次，就會被關門。',
-        '提示 5：停留滿 60 分鐘會打開旗幟畫面。'
-      ];
-
-      function showClue(){
-        $('#clueText').textContent = clues[Math.floor(Math.random()*clues.length)];
-        modal.classList.add('show');
-      }
-
-      function updateKPI(){
-        const t = now();
-        const el = t - startAt;
-        const toClose = S.AUTO_CLOSE_SECS - el;
-        const toFlag  = S.FLAG_READY_SECS - el;
-        $('#elapsed').textContent = fmtHMS(el);
-        $('#toClose').textContent = fmtMS(toClose);
-        $('#toFlag').textContent  = fmtMS(toFlag);
-        $('#clicks').textContent  = String(clicks);
-
-        if(el >= S.AUTO_CLOSE_SECS || clicks > S.MAX_CLICKS){ closed = true; setClosed(); return; }
-        if(el >= S.FLAG_READY_SECS){ revealFlag(); }
-      }
-      const ticker = setInterval(updateKPI, 1000); updateKPI();
-
-      // 任意點擊 → 彈線索；>3 次則關閉
-      document.addEventListener('click', e => {
-        if(closed) return;
-        clicks++;
-        localStorage.setItem(S.CLICK_KEY, String(clicks));
-        showClue();
-        if(clicks > S.MAX_CLICKS) setClosed();
+      // 點擊：伺服器端累加，回傳最新 clicks
+      document.addEventListener('click', async () => {
+        if (closed) return;
+        try{
+          const r = await api('/api/click', { method:'POST' });
+          clicks = r.clicks;
+          $('#clicks').textContent = clicks;
+          $('#modal').classList.add('show');
+          if (clicks > MAX_CLICKS) {
+            closed = true; $('#closed').style.display='grid';
+          }
+        }catch(e){ console.warn(e.message); }
       });
 
-      closeModal.addEventListener('click', ()=> modal.classList.remove('show'));
-      openDevtools.addEventListener('click', ()=> {
-        modal.classList.remove('show');
-        console.log('%c觀察 window.__waitControls', 'color:#22d3ee');
-        console.log(window.__waitControls);
-      });
+      $('#closeModal').onclick = ()=> $('#modal').classList.remove('show');
+      $('#resetBtn').onclick = $('#resetBtn2').onclick = async ()=>{
+        await api('/api/start', { method:'POST' }); // 重置 cookie
+        location.reload();
+      };
+
+      // 每秒更新 UI；時間到呼叫 /api/flag 由伺服器判定
+      setInterval(tick, 1000);
     }
 
-    async function revealFlag(){
-      const fw = document.querySelector('#flagwrap');
-      const flagText = document.querySelector('#flagText');
-      if(fw.classList.contains('show')) return;
-      try{
-        // 加時間戳避免快取
-        const res = await fetch('/flag.txt?t=' + Date.now(), { cache: 'no-store' });
-        const txt = (await res.text()).trim();
-        flagText.textContent = txt || '(flag 載入失敗)';
-      }catch{ flagText.textContent = '(flag 載入失敗)'; }
-      fw.classList.add('show');
+    async function tick(){
+      if (!startAt) return;
+      const el = now() - startAt;
+      $('#elapsed').textContent = fmtHMS(el);
+      $('#toClose').textContent = fmtMS(AUTO_CLOSE_SECS - el);
+      $('#toFlag').textContent  = fmtMS(FLAG_READY_SECS - el);
+      $('#clicks').textContent  = clicks;
+
+      if (el >= AUTO_CLOSE_SECS || clicks > MAX_CLICKS) {
+        closed = true; $('#closed').style.display='grid'; return;
+      }
+      if (el >= FLAG_READY_SECS) {
+        try{
+          const r = await api('/api/flag', { method:'POST' });
+          $('#flagText').textContent = r.flag || '(flag 失敗)';
+          $('#flagwrap').classList.add('show');
+        }catch(e){
+          // 還不給（伺服器會回錯誤訊息），忽略
+        }
+      }
     }
 
-    /* 假旗（擾亂用）：base64 RkxBR3s2MHNfczBfTE9OR30= -> FLAG{60s_s0_LONG} */
+    boot().catch(err => alert('初始化失敗：'+err.message));
   </script>
 </body>
 </html>
