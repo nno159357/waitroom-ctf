@@ -10,7 +10,7 @@ function getEnvInt(name, def) {
 const FLAG_READY_SECS = getEnvInt("FLAG_READY_SECS", 3600);
 const AUTO_CLOSE_SECS = getEnvInt("AUTO_CLOSE_SECS", 1800);
 const MAX_CLICKS      = getEnvInt("MAX_CLICKS", 3);
-const FLAG_TEXT       = process.env.FLAG_TEXT || "FLAG{patient_is_power}";
+const FLAG_TEXT       = process.env.FLAG_TEXT || "ISU{You_just_need_waiting}";
 
 function verify(token) {
   if (!token) return null;
