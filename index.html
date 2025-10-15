@@ -1,0 +1,304 @@
+<!--
+CTF WaitRoom Challenge – 單檔前端原型 + Node/Express 後端（見文末 server.js）
+目標：
+1) 在頁面停留滿 1 小時自動顯示 flag。
+2) 停留超過 30 分鐘 或 點擊超過 3 次 → 視為「自動關閉」。
+3) 任意點擊都會跳出「特殊頁面（線索）」。
+4) DevTools 可找到等待控制的邏輯；也能在檔案系統直接找到 flag.txt。
+
+用法：
+1) 將本檔案存為 public/index.html。
+2) 另見文末 server.js 內容，存為 server.js；在專案根目錄執行：
+   npm i express
+   node server.js
+3) 瀏覽 http://localhost:8080/
+-->
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>WaitRoom – 停留一小時拿旗</title>
+  <style>
+    :root{
+      --bg:#0f1115; --fg:#e5e7eb; --muted:#9ca3af; --accent:#22d3ee; --danger:#ef4444;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Apple Color Emoji,Noto Color Emoji,EmojiSymbols}
+    .wrap{position:fixed;inset:0;display:grid;place-items:center}
+    .bigbtn{
+      position:absolute;inset:0;border:none;background:transparent;cursor:pointer;
+    }
+    .panel{
+      z-index:1;display:flex;flex-direction:column;gap:.75rem;align-items:center;text-align:center;padding:2rem;max-width:720px
+    }
+    .title{font-size:clamp(28px,4vw,40px);font-weight:800;letter-spacing:.5px}
+    .kpis{display:flex;gap:1rem;flex-wrap:wrap;justify-content:center}
+    .kpi{padding:1rem 1.25rem;border:1px solid #1f2937;border-radius:16px;background:#0b0d12}
+    .kpi .v{font-variant-tabular-nums:tabular-nums;font-size:1.25rem}
+    .sub{color:var(--muted);font-size:.9rem}
+    .hint{font-size:.95rem;color:#a7f3d0}
+    .foot{color:var(--muted);font-size:.85rem}
+    .pill{display:inline-block;padding:.15rem .5rem;border-radius:999px;border:1px dashed #334155;color:#94a3b8}
+
+    /* 特殊頁面（模態） */
+    .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:1rem}
+    .modal.show{display:flex}
+    .card{background:#0b0d12;border:1px solid #1f2937;border-radius:18px;max-width:560px;width:100%;padding:1.25rem}
+    .card h3{margin:.25rem 0 0.5rem 0;font-size:1.15rem}
+    .card p{color:#d1d5db;line-height:1.6}
+    .row{display:flex;gap:.75rem;flex-wrap:wrap;margin-top:1rem}
+    .btn{padding:.6rem 1rem;border-radius:12px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;cursor:pointer}
+    .btn:active{transform:translateY(1px)}
+
+    /* 關閉畫面 */
+    .closed{position:fixed;inset:0;display:grid;place-items:center;background:#0a0c10}
+    .closed .box{border:1px dashed #374151;border-radius:18px;padding:2rem;max-width:560px;text-align:center}
+    .closed h2{margin:0 0 .5rem 0}
+
+    /* flag 畫面 */
+    .flagwrap{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.72);}
+    .flagwrap.show{display:flex}
+    .flagcard{background:#001b1b;border:1px solid #0e7490;border-radius:20px;padding:1.5rem;max-width:680px;width:100%}
+    .flagcard h2{margin-top:0}
+    code{background:#111827;border:1px solid #1f2937;padding:.25rem .4rem;border-radius:6px}
+  </style>
+</head>
+<body>
+  <div class="wrap" id="app">
+    <button class="bigbtn" id="bigbtn" aria-label="等待即可獲得旗幟"></button>
+    <div class="panel">
+      <div class="title">等待一小時，獲得旗幟 🏳️</div>
+      <div class="kpis">
+        <div class="kpi"><div class="sub">已等待</div><div class="v" id="elapsed">00:00:00</div></div>
+        <div class="kpi"><div class="sub">距離自動關閉（30 分）</div><div class="v" id="toClose">30:00</div></div>
+        <div class="kpi"><div class="sub">距離可領旗（60 分）</div><div class="v" id="toFlag">60:00</div></div>
+        <div class="kpi"><div class="sub">點擊次數（≤3）</div><div class="v" id="clicks">0</div></div>
+      </div>
+      <div class="hint">提示：任意點擊都會跳出「特殊頁面」。但點太多會關門喔。</div>
+      <div class="foot">你可以從 <span class="pill">開發人員工具</span> 觀察等待邏輯；或直接檔案系統找 <code>/flag.txt</code>。</div>
+    </div>
+  </div>
+
+  <!-- 特殊頁面（線索） -->
+  <div class="modal" id="modal">
+    <div class="card">
+      <h3>特殊頁面（線索）</h3>
+      <p id="clueText">……</p>
+      <div class="row">
+        <button class="btn" id="closeModal">知道了</button>
+        <button class="btn" id="openDevtools">怎麼找邏輯？</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- flag 畫面 -->
+  <div class="flagwrap" id="flagwrap">
+    <div class="flagcard">
+      <h2>恭喜你，耐心通關！</h2>
+      <p>以下為你的旗幟：</p>
+      <p><code id="flagText">loading…</code></p>
+      <p class="sub">（同時也可於 <code>/flag.txt</code> 直接取得。）</p>
+      <div class="row"><button class="btn" onclick="location.reload()">重新開始</button></div>
+    </div>
+  </div>
+
+  <script>
+  // === 等待控制（公開在全域，供 DevTools 閱讀） ===
+  window.__waitControls = {
+    START_KEY: 'wr_start_at',
+    CLICK_KEY: 'wr_clicks',
+    CLOSED_KEY: 'wr_closed',
+    FLAG_READY_SECS: 60 * 60,   // 1 小時
+    AUTO_CLOSE_SECS: 30 * 60,   // 30 分鐘
+    MAX_CLICKS: 3
+  };
+
+  const S = window.__waitControls;
+
+  // 工具函式
+  const $ = sel => document.querySelector(sel);
+  const fmtHMS = (s)=>{
+    s = Math.max(0, Math.floor(s));
+    const h = String(Math.floor(s/3600)).padStart(2,'0');
+    const m = String(Math.floor((s%3600)/60)).padStart(2,'0');
+    const sec = String(s%60).padStart(2,'0');
+    return `${h}:${m}:${sec}`;
+  }
+  const fmtMS = (s)=>{
+    s = Math.max(0, Math.floor(s));
+    const m = String(Math.floor(s/60)).padStart(2,'0');
+    const sec = String(s%60).padStart(2,'0');
+    return `${m}:${sec}`;
+  }
+
+  // 初始化狀態
+  const now = ()=> Math.floor(Date.now()/1000);
+  if(!localStorage.getItem(S.START_KEY)){
+    localStorage.setItem(S.START_KEY, String(now()));
+  }
+  if(!localStorage.getItem(S.CLICK_KEY)){
+    localStorage.setItem(S.CLICK_KEY, '0');
+  }
+  const isClosed = ()=> localStorage.getItem(S.CLOSED_KEY)==='1';
+  const setClosed = ()=> {
+    localStorage.setItem(S.CLOSED_KEY,'1');
+    renderClosed();
+  };
+
+  function renderClosed(){
+    document.body.innerHTML = `
+      <div class="closed">
+        <div class="box">
+          <h2>Web 已自動關閉</h2>
+          <p class="sub">原因：超過 30 分鐘或點擊超過 3 次。</p>
+          <p class="sub">你可以重整並清空 <code>LocalStorage</code> 再試一次。</p>
+        </div>
+      </div>`;
+  }
+
+  if(isClosed()){
+    renderClosed();
+  } else {
+    boot();
+  }
+
+  function boot(){
+    const startAt = Number(localStorage.getItem(S.START_KEY)|| now());
+    const bigbtn = $('#bigbtn');
+    const modal = $('#modal');
+    const closeModal = $('#closeModal');
+    const openDevtools = $('#openDevtools');
+
+    let clicks = Number(localStorage.getItem(S.CLICK_KEY)||0);
+    let closed = false;
+
+    const clues = [
+      '提示 1：控制常數公開在 window.__waitControls。',
+      '提示 2：LocalStorage 中的 wr_start_at 與 wr_clicks 可以觀察（與被惡意竄改）。',
+      '提示 3：/flag.txt 可能是你想找的檔案。',
+      '提示 4：超過 30 分鐘或點滿 3 次，就會被關門。',
+      '提示 5：停留滿 60 分鐘會打開旗幟畫面。'
+    ];
+
+    function showClue(){
+      const idx = Math.floor(Math.random()*clues.length);
+      $('#clueText').textContent = clues[idx];
+      modal.classList.add('show');
+    }
+
+    function updateKPI(){
+      const t = now();
+      const el = t - startAt;
+      const toClose = S.AUTO_CLOSE_SECS - el;
+      const toFlag = S.FLAG_READY_SECS - el;
+      $('#elapsed').textContent = fmtHMS(el);
+      $('#toClose').textContent = fmtMS(toClose);
+      $('#toFlag').textContent = fmtMS(toFlag);
+      $('#clicks').textContent = String(clicks);
+
+      if(el >= S.AUTO_CLOSE_SECS || clicks > S.MAX_CLICKS){
+        closed = true; setClosed();
+        return;
+      }
+      if(el >= S.FLAG_READY_SECS){
+        revealFlag();
+      }
+    }
+
+    const ticker = setInterval(updateKPI, 1000);
+    updateKPI();
+
+    // 任意點擊 → 彈出特殊頁面；>3 次視為關閉
+    function onAnyClick(e){
+      if(closed) return;
+      clicks++;
+      localStorage.setItem(S.CLICK_KEY, String(clicks));
+      showClue();
+      if(clicks > S.MAX_CLICKS){
+        setClosed();
+      }
+    }
+    document.addEventListener('click', onAnyClick);
+
+    closeModal.addEventListener('click', ()=> modal.classList.remove('show'));
+    openDevtools.addEventListener('click', ()=> {
+      modal.classList.remove('show');
+      console.log('%c觀察這個物件 → window.__waitControls', 'color:#22d3ee');
+      console.log(window.__waitControls);
+    });
+
+    // DevTools 檢測（弱）：視窗外框與內框尺寸差
+    setInterval(()=>{
+      const dw = window.outerWidth - window.innerWidth;
+      const dh = window.outerHeight - window.innerHeight;
+      if(dw > 160 || dh > 160){
+        // 在這裡不做處罰，純提示：
+        console.log('[info] 似乎開了開發者工具或視窗被調整。');
+      }
+    }, 2000);
+  }
+
+  async function revealFlag(){
+    const fw = document.getElementById('flagwrap');
+    const flagText = document.getElementById('flagText');
+    if(fw.classList.contains('show')) return; // 已顯示過
+    try{
+      const res = await fetch('/flag.txt',{cache:'no-store'});
+      const txt = (await res.text()).trim();
+      flagText.textContent = txt || '(flag 載入失敗)';
+    }catch(err){
+      flagText.textContent = '(flag 載入失敗)';
+    }
+    fw.classList.add('show');
+  }
+
+  // 另一路線：把一份假 flag 混在原始碼註解，避免誤導（CTF 可自訂）
+  /* base64: RkxBR3s2MHNfczBfTE9OR30= → 解碼為 FLAG{60s_s0_LONG}（假） */
+  </script>
+</body>
+</html>
+
+<!-- ====================== 以下為 Node/Express 簡易後端 =====================
+將以下內容另存為 server.js，與 public/ 同層。
+------------------------------------------------------------------------------
+const express = require('express');
+const path = require('path');
+const app = express();
+
+// 靜態檔案（index.html、CSS/JS、flag.txt）
+app.use(express.static(path.join(__dirname, 'public'), {
+  etag: false,
+  lastModified: false,
+  cacheControl: false,
+  setHeaders: (res, filePath) => {
+    // 避免瀏覽器把 flag.txt 快取住
+    if (filePath.endsWith('flag.txt')) {
+      res.set('Cache-Control', 'no-store');
+    }
+  }
+}));
+
+// 可選的 /closed 顯示（如果想用 302 導轉模擬關閉，可用此頁）：
+app.get('/closed', (req, res) => {
+  res.send(`<!doctype html><meta charset="utf-8"/><title>Closed</title>
+  <style>body{margin:0;display:grid;place-items:center;height:100vh;background:#0a0c10;color:#e5e7eb;font-family:system-ui}</style>
+  <div><h2>Web 已關閉</h2><p>請稍後再來</p></div>`);
+});
+
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => console.log(`WaitRoom on http://localhost:${PORT}`));
+------------------------------------------------------------------------------
+
+在 public/ 目錄放入：
+- index.html（本檔）
+- flag.txt（例如：FLAG{patient_is_power}}
+
+攻防與解法說明（交給選手的線索不一定全給，依出題調整）：
+- 情況一（DevTools）：觀察 window.__waitControls 與 localStorage（wr_start_at、wr_clicks），讀懂觸發條件。
+- 情況二（檔案）：直接去 /flag.txt 取檔；或抓站檔壓縮找。你也可加 robots.txt/特殊路徑混淆。
+- 自動關閉實作：本頁以替換 DOM 模擬（瀏覽器限制，無法強制 window.close）。亦可導向 /closed。
+- 變體：把 FLAG_READY_SECS/AUTO_CLOSE_SECS/ MAX_CLICKS 改為更刁鑽；或把 flag API 換到 /api/flag，做 Referer/時間戳檢查。
+- 反作弊：可在後端綁 session + 簽名 token，避免直接改 localStorage；本題刻意留洞，符合教學目的。
+
+-->
