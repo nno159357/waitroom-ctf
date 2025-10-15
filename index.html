@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>WaitRoom – 停留一小時拿旗</title>
   <style>
-    :root{--bg:#0f1115;--fg:#e5e7eb;--muted:#9ca3af;--accent:#22d3ee}
+    :root{--bg:#0f1115;--fg:#e5e7eb;--muted:#9ca3af}
     *{box-sizing:border-box}
     html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:ui-sans-serif,system-ui,Segoe UI,Roboto}
     .wrap{position:fixed;inset:0;display:grid;place-items:center}
@@ -55,7 +55,7 @@
       </div>
 
       <div class="row">
-        <!-- 一鍵重置：清除 localStorage 並重整 -->
+        <!-- 一鍵重置（一般畫面也能按） -->
         <button class="btn" id="resetBtn" title="清除 wr_start_at / wr_clicks / wr_closed 並重整">重置挑戰</button>
       </div>
 
@@ -99,7 +99,7 @@
     };
     const S = window.__waitControls;
 
-    // 工具
+    // 小工具
     const $ = s => document.querySelector(s);
     const now = () => Math.floor(Date.now()/1000);
     const fmtHMS = s => {
@@ -118,7 +118,7 @@
     if(!localStorage.getItem(S.START_KEY)) localStorage.setItem(S.START_KEY, String(now()));
     if(!localStorage.getItem(S.CLICK_KEY)) localStorage.setItem(S.CLICK_KEY, '0');
 
-    // 一鍵重置
+    // 一鍵重置（一般畫面）
     $('#resetBtn').addEventListener('click', () => {
       localStorage.removeItem(S.START_KEY);
       localStorage.removeItem(S.CLICK_KEY);
@@ -129,13 +129,22 @@
     // 關閉畫面
     const isClosed = () => localStorage.getItem(S.CLOSED_KEY)==='1';
     const setClosed = () => { localStorage.setItem(S.CLOSED_KEY,'1'); renderClosed(); };
+
     function renderClosed(){
       document.body.innerHTML = `
         <div class="closed">
           <div class="box">
             <h2>Web 已自動關閉</h2>
             <p class="sub">原因：超過 30 分鐘或點擊超過 3 次。</p>
-            <p class="sub">可按「重置挑戰」或清空 LocalStorage 後重試。</p>
+            <p class="sub">可按下方按鈕清空 LocalStorage 後重試。</p>
+            <div style="margin-top:1rem;">
+              <button class="btn" onclick="
+                localStorage.removeItem('wr_start_at');
+                localStorage.removeItem('wr_clicks');
+                localStorage.removeItem('wr_closed');
+                location.reload();
+              ">重置挑戰</button>
+            </div>
           </div>
         </div>`;
     }
@@ -198,8 +207,8 @@
     }
 
     async function revealFlag(){
-      const fw = $('#flagwrap');
-      const flagText = $('#flagText');
+      const fw = document.querySelector('#flagwrap');
+      const flagText = document.querySelector('#flagText');
       if(fw.classList.contains('show')) return;
       try{
         // 加時間戳避免快取
