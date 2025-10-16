@@ -23,7 +23,6 @@
     .row{display:flex;gap:.6rem;flex-wrap:wrap;justify-content:center}
     .btn{padding:.6rem 1rem;border-radius:12px;border:1px solid var(--border);background:#0f172a;color:#e2e8f0;cursor:pointer}
     .btn:active{transform:translateY(1px)}
-    .btn.ghost{background:transparent}
     .btn.copy.ok{border-color:#14532d;background:#14532d}
     .hint{color:var(--muted);font-size:.9rem}
 
@@ -75,13 +74,12 @@
         <div class="kpi">
           <div class="label">剩餘點擊</div>
           <div class="value" id="clicksLeft">-- / --</div>
-          <div class="hint" id="clicksHint">僅首點會彈線索</div>
+          <div class="hint" id="clicksHint">點擊頁面會彈出線索；超過上限將關閉</div>
         </div>
       </div>
 
       <div class="row">
         <button class="btn" id="resetBtn">重置挑戰（清 Cookie）</button>
-        <button class="btn ghost" id="aboutBtn">如何解？（線索）</button>
       </div>
 
       <div class="hint">伺服器端會驗證時間與點擊次數；直接改 LocalStorage 沒用。</div>
@@ -138,9 +136,7 @@ fetch('/api/flag', {
     const fmtMS  = s => { s=Math.max(0,Math.floor(s)); return `${pad(s/60|0)}:${pad(s%60)}`; }
     const clamp = (v,min,max)=>Math.max(min,Math.min(max,v));
 
-    // 狀態
     let startAt=null, clicks=0, MAX_CLICKS=3, FLAG_READY_SECS=3600, AUTO_CLOSE_SECS=1800, closed=false;
-    let clueShown = localStorage.getItem('wr_clue_shown') === '1'; // 只首點彈線索
 
     async function api(path, init) {
       const res = await fetch(path, { ...init, credentials:'include', cache:'no-store' });
@@ -148,14 +144,13 @@ fetch('/api/flag', {
       return res.json();
     }
 
-    // UI 綁定
     const modal = $('#modal');
     const bigbtn = $('#bigbtn');
 
     function showModal(){ modal.classList.add('show'); }
     function hideModal(){ modal.classList.remove('show'); }
 
-    // 複製按鈕
+    // 複製指令
     $('#copyBtn').onclick = async () => {
       const txt = $('#snippet').innerText.trim();
       try { await navigator.clipboard.writeText(txt); $('#copyBtn').classList.add('ok'); $('#copyBtn').textContent='已複製！'; setTimeout(()=>{ $('#copyBtn').classList.remove('ok'); $('#copyBtn').textContent='複製 Console 指令'; },1200);} catch {}
@@ -168,24 +163,22 @@ fetch('/api/flag', {
       const info = await api('/api/start', { method:'POST' });
       ({ startAt, clicks, FLAG_READY_SECS, AUTO_CLOSE_SECS, MAX_CLICKS } = info);
 
-      // 點擊只在大按鈕，模態開啟不計次
+      // 點整頁即：+1 點擊 並 顯示線索
       bigbtn.addEventListener('click', async ()=>{
-        if (closed || modal.classList.contains('show')) return;
+        if (closed) return;
         try{
           const r = await api('/api/click', { method:'POST' });
           clicks = r.clicks;
-          if (!clueShown) { showModal(); clueShown = true; localStorage.setItem('wr_clue_shown','1'); }
+          showModal();
         }catch(e){ /* ignore */ }
       });
 
-      $('#aboutBtn').onclick = () => showModal();
       $('#closeModal').onclick = (e)=>{ e.stopPropagation(); hideModal(); };
       modal.addEventListener('click', (e)=>{ if (e.target === modal) hideModal(); });
 
       const doReset = async ()=>{
         if (!confirm('確定要重置挑戰並清除 Cookie 嗎？')) return;
         await api('/api/start', { method:'POST' });
-        localStorage.removeItem('wr_clue_shown');
         location.reload();
       };
       $('#resetBtn').onclick = doReset;
@@ -203,34 +196,30 @@ fetch('/api/flag', {
       const leftClose = AUTO_CLOSE_SECS - elapsed;
       const leftFlag  = FLAG_READY_SECS - elapsed;
 
-      // KPI
       $('#elapsed').textContent = fmtHMS(elapsed);
       $('#toClose').textContent = fmtMS(leftClose);
       $('#toFlag').textContent  = fmtMS(leftFlag);
 
-      // 進度條
       setBar($('#barClose'), AUTO_CLOSE_SECS>0 ? (elapsed / AUTO_CLOSE_SECS)*100 : 0);
       setBar($('#barFlag'),  (elapsed / FLAG_READY_SECS)*100);
 
-      // 剩餘點擊
       const left = Math.max(0, MAX_CLICKS - clicks);
       $('#clicksLeft').textContent = `${left} / ${MAX_CLICKS}`;
       $('#clicksLeft').classList.toggle('danger', left===0);
-      $('#clicksHint').textContent = left===0 ? '已達上限，請勿再點' : (clueShown ? '線索已顯示' : '僅首點會彈線索');
+      $('#clicksHint').textContent = left===0 ? '已達上限，請勿再點' : '點擊頁面會彈出線索；超過上限將關閉';
 
-      // 狀態切換
       if (AUTO_CLOSE_SECS>0 && elapsed >= AUTO_CLOSE_SECS || clicks > MAX_CLICKS) {
         closed = true; $('#closed').classList.add('show'); return;
       }
       if (elapsed >= FLAG_READY_SECS) {
         try{
           const r = await fetch('/api/flag', { method:'POST', credentials:'include' });
-          if (r.ok) {
+        if (r.ok) {
             const j = await r.json();
             $('#flagText').textContent = j.flag || '(flag 失敗)';
             $('#flagwrap').classList.add('show');
           }
-        }catch(e){/* 可能尚未可領，忽略 */}
+        }catch(e){}
       }
     }
 
