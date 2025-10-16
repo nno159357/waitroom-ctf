@@ -1,37 +1,49 @@
 <!doctype html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>WaitRoom – 伺服器驗證版</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>WaitRoom – 伺服器驗證（精修版）</title>
   <style>
-    :root{--bg:#0f1115;--fg:#e5e7eb;--muted:#9ca3af}
+    :root{--bg:#0f1115;--panel:#0b0d12;--border:#1f2937;--fg:#e5e7eb;--muted:#9ca3af;--accent:#60a5fa;--danger:#ef4444;--ok:#22c55e}
     *{box-sizing:border-box}
     html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:ui-sans-serif,system-ui,Segoe UI,Roboto}
     .wrap{position:fixed;inset:0;display:grid;place-items:center}
     .bigbtn{position:absolute;inset:0;border:none;background:transparent;cursor:pointer}
-    .panel{z-index:1;display:flex;flex-direction:column;gap:.75rem;align-items:center;text-align:center;padding:2rem;max-width:720px}
-    .title{font-size:clamp(28px,4vw,40px);font-weight:800}
-    .kpis{display:flex;gap:1rem;flex-wrap:wrap;justify-content:center}
-    .kpi{padding:1rem 1.25rem;border:1px solid #1f2937;border-radius:16px;background:#0b0d12}
-    .kpi .v{font-variant-numeric:tabular-nums;font-size:1.25rem}
-    .sub{color:var(--muted);font-size:.9rem}
-    .row{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center}
-    .btn{padding:.6rem 1rem;border-radius:12px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;cursor:pointer}
+    .panel{z-index:1;display:flex;flex-direction:column;gap:1rem;align-items:center;text-align:center;padding:2rem;max-width:920px;width:100%}
+    .title{font-size:clamp(28px,4vw,44px);font-weight:800;letter-spacing:.02em}
+    .kpis{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:1rem;width:100%}
+    @media (max-width:820px){.kpis{grid-template-columns:repeat(2,minmax(160px,1fr))}}
+    .kpi{padding:1rem 1.25rem;border:1px solid var(--border);border-radius:16px;background:var(--panel)}
+    .kpi .label{color:var(--muted);font-size:.9rem;margin-bottom:.25rem}
+    .kpi .value{font-variant-numeric:tabular-nums;letter-spacing:.02em;font-size:1.35rem}
+    .bar{margin-top:.5rem;height:6px;background:#0a0c10;border:1px solid var(--border);border-radius:999px;overflow:hidden}
+    .bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),#34d399)}
+    .bar.danger>i{background:linear-gradient(90deg,var(--danger),#f59e0b)}
+    .row{display:flex;gap:.6rem;flex-wrap:wrap;justify-content:center}
+    .btn{padding:.6rem 1rem;border-radius:12px;border:1px solid var(--border);background:#0f172a;color:#e2e8f0;cursor:pointer}
     .btn:active{transform:translateY(1px)}
+    .btn.ghost{background:transparent}
+    .btn.copy.ok{border-color:#14532d;background:#14532d}
+    .hint{color:var(--muted);font-size:.9rem}
 
     .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:1rem}
     .modal.show{display:flex}
-    .card{background:#0b0d12;border:1px solid #1f2937;border-radius:18px;max-width:560px;width:100%;padding:1.25rem}
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:18px;max-width:680px;width:100%;padding:1.25rem}
+    .card h3{margin:.2rem 0 0.5rem 0}
+    .code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#0b1220;border:1px solid var(--border);padding:.75rem;border-radius:10px;overflow:auto;font-size:.9rem;text-align:left}
+    .code kbd{background:#111827;border:1px solid var(--border);padding:.08rem .35rem;border-radius:6px}
 
     .closed{position:fixed;inset:0;display:none;place-items:center;background:#0a0c10}
     .closed.show{display:grid}
-    .closed .box{border:1px dashed #374151;border-radius:18px;padding:2rem;max-width:560px;text-align:center}
+    .closed .box{border:1px dashed var(--border);border-radius:18px;padding:2rem;max-width:620px;text-align:center;background:var(--panel)}
 
     .flagwrap{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.72)}
     .flagwrap.show{display:flex}
     .flagcard{background:#001b1b;border:1px solid #0e7490;border-radius:20px;padding:1.5rem;max-width:680px;width:100%}
-    code{background:#111827;border:1px solid #1f2937;padding:.25rem .4rem;border-radius:6px}
+    code{background:#111827;border:1px solid var(--border);padding:.25rem .4rem;border-radius:6px}
+    .danger{color:var(--danger)}
+    .ok{color:var(--ok)}
   </style>
 </head>
 <body>
@@ -41,18 +53,38 @@
 
     <div class="panel">
       <div class="title">等待一小時，伺服器驗證 🏳️</div>
+
       <div class="kpis">
-        <div class="kpi"><div class="sub">已等待</div><div class="v" id="elapsed">--:--:--</div></div>
-        <div class="kpi"><div class="sub">距離自動關閉</div><div class="v" id="toClose">--:--</div></div>
-        <div class="kpi"><div class="sub">距離可領旗</div><div class="v" id="toFlag">--:--</div></div>
-        <div class="kpi"><div class="sub">點擊次數（≤3）</div><div class="v" id="clicks">0</div></div>
+        <div class="kpi">
+          <div class="label">已等待</div>
+          <div class="value" id="elapsed">--:--:--</div>
+        </div>
+
+        <div class="kpi">
+          <div class="label">距離自動關閉</div>
+          <div class="value" id="toClose">--:--</div>
+          <div class="bar danger"><i id="barClose" style="width:0%"></i></div>
+        </div>
+
+        <div class="kpi">
+          <div class="label">距離可領旗</div>
+          <div class="value" id="toFlag">--:--</div>
+          <div class="bar"><i id="barFlag" style="width:0%"></i></div>
+        </div>
+
+        <div class="kpi">
+          <div class="label">剩餘點擊</div>
+          <div class="value" id="clicksLeft">-- / --</div>
+          <div class="hint" id="clicksHint">僅首點會彈線索</div>
+        </div>
       </div>
 
       <div class="row">
         <button class="btn" id="resetBtn">重置挑戰（清 Cookie）</button>
+        <button class="btn ghost" id="aboutBtn">如何解？（線索）</button>
       </div>
 
-      <div class="sub">伺服器端會驗證時間與點擊次數；直接改 localStorage 沒用。</div>
+      <div class="hint">伺服器端會驗證時間與點擊次數；直接改 LocalStorage 沒用。</div>
     </div>
   </div>
 
@@ -60,10 +92,19 @@
   <div class="modal" id="modal">
     <div class="card">
       <h3>特殊頁面（線索）</h3>
-      <p id="clueText">觀察網路請求：/api/start、/api/click、/api/flag</p>
-      <div class="row">
+      <p>觀察網路請求：<code>/api/start</code>、<code>/api/click</code>、<code>/api/flag</code>。</p>
+      <div class="code" id="snippet">
+fetch('/api/flag', {
+  method: 'POST',
+  credentials: 'include',
+  headers: { 'x-debug-mode': '1', 'x-debug-now': String(Math.floor(Date.now()/1000)+4000) }
+}).then(r=>r.text()).then(console.log);
+      </div>
+      <div class="row" style="margin-top:.5rem">
+        <button class="btn copy" id="copyBtn">複製 Console 指令</button>
         <button class="btn" id="closeModal">知道了</button>
       </div>
+      <div class="hint">提示：帶 <code>credentials:'include'</code> 才會附上 session；以伺服器時間為準。</div>
     </div>
   </div>
 
@@ -71,10 +112,11 @@
   <div class="closed" id="closed">
     <div class="box">
       <h2>Web 已自動關閉</h2>
-      <p class="sub">原因：超過 30 分鐘或點擊超過 3 次（以伺服器端為準）。</p>
+      <p class="hint">原因：超過自動關閉時間或點擊次數上限（以伺服器端為準）。</p>
       <div style="margin-top:1rem;">
         <button class="btn" id="resetBtn2">重置挑戰</button>
       </div>
+      <div class="hint" style="margin-top:.5rem;">你也可以研究網路請求，尋找不只等待的做法。</div>
     </div>
   </div>
 
@@ -94,83 +136,101 @@
     const pad = n => String(n).padStart(2,'0');
     const fmtHMS = s => { s=Math.max(0,Math.floor(s)); return `${pad(s/3600|0)}:${pad((s%3600)/60|0)}:${pad(s%60)}`; }
     const fmtMS  = s => { s=Math.max(0,Math.floor(s)); return `${pad(s/60|0)}:${pad(s%60)}`; }
+    const clamp = (v,min,max)=>Math.max(min,Math.min(max,v));
 
-    let startAt = null, clicks = 0, FLAG_READY_SECS=3600, AUTO_CLOSE_SECS=1800, MAX_CLICKS=3, closed=false;
+    // 狀態
+    let startAt=null, clicks=0, MAX_CLICKS=3, FLAG_READY_SECS=3600, AUTO_CLOSE_SECS=1800, closed=false;
+    let clueShown = localStorage.getItem('wr_clue_shown') === '1'; // 只首點彈線索
 
     async function api(path, init) {
-      const res = await fetch(path, { ...init, credentials: 'include', cache:'no-store' });
+      const res = await fetch(path, { ...init, credentials:'include', cache:'no-store' });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     }
 
-    async function boot(){
-      // 初始化（伺服器會回開始時間與規則）
-      const info = await api('/api/start', { method:'POST' });
-      startAt = info.startAt;
-      clicks  = info.clicks;
-      FLAG_READY_SECS = info.FLAG_READY_SECS;
-      AUTO_CLOSE_SECS = info.AUTO_CLOSE_SECS;
-      MAX_CLICKS      = info.MAX_CLICKS;
+    // UI 綁定
+    const modal = $('#modal');
+    const bigbtn = $('#bigbtn');
 
-      // 只對整頁「大按鈕」計次；模態開啟時不計
-      const modal = $('#modal');
-      $('#bigbtn').addEventListener('click', async (e)=>{
-        if (closed) return;
-        if (modal.classList.contains('show')) return; // 有模態就不計
+    function showModal(){ modal.classList.add('show'); }
+    function hideModal(){ modal.classList.remove('show'); }
+
+    // 複製按鈕
+    $('#copyBtn').onclick = async () => {
+      const txt = $('#snippet').innerText.trim();
+      try { await navigator.clipboard.writeText(txt); $('#copyBtn').classList.add('ok'); $('#copyBtn').textContent='已複製！'; setTimeout(()=>{ $('#copyBtn').classList.remove('ok'); $('#copyBtn').textContent='複製 Console 指令'; },1200);} catch {}
+    };
+
+    // Esc 關閉模態
+    document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') hideModal(); });
+
+    async function boot(){
+      const info = await api('/api/start', { method:'POST' });
+      ({ startAt, clicks, FLAG_READY_SECS, AUTO_CLOSE_SECS, MAX_CLICKS } = info);
+
+      // 點擊只在大按鈕，模態開啟不計次
+      bigbtn.addEventListener('click', async ()=>{
+        if (closed || modal.classList.contains('show')) return;
         try{
           const r = await api('/api/click', { method:'POST' });
           clicks = r.clicks;
-          $('#clicks').textContent = clicks;
-          modal.classList.add('show');
-          if (clicks > MAX_CLICKS) {
-            closed = true; $('#closed').classList.add('show');
-          }
-        }catch(err){ console.warn(err.message); }
+          if (!clueShown) { showModal(); clueShown = true; localStorage.setItem('wr_clue_shown','1'); }
+        }catch(e){ /* ignore */ }
       });
 
-      // 模態內按鈕阻止冒泡，避免被誤算為一次「頁面點擊」
-      $('#closeModal').addEventListener('click', (e)=>{
-        e.stopPropagation();
-        modal.classList.remove('show');
-      });
+      $('#aboutBtn').onclick = () => showModal();
+      $('#closeModal').onclick = (e)=>{ e.stopPropagation(); hideModal(); };
+      modal.addEventListener('click', (e)=>{ if (e.target === modal) hideModal(); });
 
-      // 點遮罩背景可關閉模態（不計次）
-      modal.addEventListener('click', (e)=>{
-        if (e.target === modal) modal.classList.remove('show');
-      });
-
-      // 重置（兩個地方的按鈕都能用）
       const doReset = async ()=>{
-        await api('/api/start', { method:'POST' }); // 重發新 cookie
+        if (!confirm('確定要重置挑戰並清除 Cookie 嗎？')) return;
+        await api('/api/start', { method:'POST' });
+        localStorage.removeItem('wr_clue_shown');
         location.reload();
       };
-      $('#resetBtn').onclick  = doReset;
+      $('#resetBtn').onclick = doReset;
       $('#resetBtn2').onclick = doReset;
 
-      // 每秒更新 UI；時間到請伺服器核發旗
-      setInterval(tick, 1000);
+      setInterval(tick, 200);
       tick();
     }
 
+    function setBar(el, pct){ el.style.width = clamp(pct,0,100) + '%'; }
+
     async function tick(){
       if (!startAt) return;
-      const el = now() - startAt;
-      $('#elapsed').textContent = fmtHMS(el);
-      $('#toClose').textContent = fmtMS(AUTO_CLOSE_SECS - el);
-      $('#toFlag').textContent  = fmtMS(FLAG_READY_SECS - el);
-      $('#clicks').textContent  = clicks;
+      const elapsed = now() - startAt;
+      const leftClose = AUTO_CLOSE_SECS - elapsed;
+      const leftFlag  = FLAG_READY_SECS - elapsed;
 
-      if (el >= AUTO_CLOSE_SECS || clicks > MAX_CLICKS) {
+      // KPI
+      $('#elapsed').textContent = fmtHMS(elapsed);
+      $('#toClose').textContent = fmtMS(leftClose);
+      $('#toFlag').textContent  = fmtMS(leftFlag);
+
+      // 進度條
+      setBar($('#barClose'), AUTO_CLOSE_SECS>0 ? (elapsed / AUTO_CLOSE_SECS)*100 : 0);
+      setBar($('#barFlag'),  (elapsed / FLAG_READY_SECS)*100);
+
+      // 剩餘點擊
+      const left = Math.max(0, MAX_CLICKS - clicks);
+      $('#clicksLeft').textContent = `${left} / ${MAX_CLICKS}`;
+      $('#clicksLeft').classList.toggle('danger', left===0);
+      $('#clicksHint').textContent = left===0 ? '已達上限，請勿再點' : (clueShown ? '線索已顯示' : '僅首點會彈線索');
+
+      // 狀態切換
+      if (AUTO_CLOSE_SECS>0 && elapsed >= AUTO_CLOSE_SECS || clicks > MAX_CLICKS) {
         closed = true; $('#closed').classList.add('show'); return;
       }
-      if (el >= FLAG_READY_SECS) {
+      if (elapsed >= FLAG_READY_SECS) {
         try{
-          const r = await api('/api/flag', { method:'POST' });
-          $('#flagText').textContent = r.flag || '(flag 失敗)';
-          $('#flagwrap').classList.add('show');
-        }catch(e){
-          // 未達條件時會回 4xx，忽略即可
-        }
+          const r = await fetch('/api/flag', { method:'POST', credentials:'include' });
+          if (r.ok) {
+            const j = await r.json();
+            $('#flagText').textContent = j.flag || '(flag 失敗)';
+            $('#flagwrap').classList.add('show');
+          }
+        }catch(e){/* 可能尚未可領，忽略 */}
       }
     }
 
