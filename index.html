@@ -92,11 +92,12 @@
       <h3>特殊頁面（線索）</h3>
       <p>觀察網路請求：<code>/api/start</code>、<code>/api/click</code>、<code>/api/flag</code>。</p>
       <div class="code" id="snippet">
-fetch('/api/flag', {
-  method: 'POST',
-  credentials: 'include',
-  headers: { 'x-debug-mode': '1', 'x-debug-now': String(Math.floor(Date.now()/1000)+4000) }
-}).then(r=>r.text()).then(console.log);
+  method:'',
+  credentials:'',
+  headers:{
+    'x-debug-mode':'',
+    'x-debug-now': 
+  }
       </div>
       <div class="row" style="margin-top:.5rem">
         <button class="btn copy" id="copyBtn">複製 Console 指令</button>
@@ -227,4 +228,5 @@ fetch('/api/flag', {
   </script>
 </body>
 </html>
+
 
